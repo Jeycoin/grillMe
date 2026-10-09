@@ -1,0 +1,15 @@
+{
+  "_说明": "把这里替换成你自己的 MCP 配置，改名为 mcp.json 才会生效。支持 command(stdio) 和 url(streamable-http) 两种传输。",
+  "mcpServers": {
+    "xiaohongshu": {
+      "command": "npx",
+      "args": ["-y", "替换成你的-小红书-mcp-包名"]
+    },
+    "示例-http服务": {
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer xxx"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f8fa" />
+    <title>拷问官 · AI 面试官</title>
+    <script>
+      /* 首屏渲染前先把主题写上，否则会闪一下白底。
+         这段必须内联且同步执行，不能挪进 bundle。 */
+      (function () {
+        try {
+          var m = localStorage.getItem('kewenguan.theme.v1') || 'auto'
+          var dark =
+            m === 'dark' ||
+            (m === 'auto' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var t = dark ? 'dark' : 'light'
+          document.documentElement.dataset.theme = t
+          document.documentElement.style.colorScheme = t
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', t === 'dark' ? '#15171a' : '#f7f8fa')
+        } catch (e) {
+          /* 读不到 localStorage 就用默认浅色 */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

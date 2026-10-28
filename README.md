@@ -175,12 +175,18 @@ data/
 ```
 麦克风 → 16k PCM (AudioWorklet) → WAV → POST /api/voice/asr  → qwen3-asr-flash
        → LLM（人格 + 记忆 + 面经）
-       → 流式断句 → 逐句 POST /api/voice/tts → qwen3-tts-instruct-flash → 排队播放（可打断）
+       → 流式断句 → 逐句 POST /api/voice/tts → qwen3-tts-flash → 排队播放（可打断）
 ```
 
 选级联不选 `qwen3-omni-flash-realtime` 端到端的原因：**端到端塞不进人格、记忆和面经**，
-而这三个恰好是这个产品的全部价值。`qwen3-tts-instruct-flash` 支持用指令描述语气
+而这三个恰好是这个产品的全部价值。`qwen3-tts-flash` 支持用 `instructions` 描述语气
 （冷淡/打断/质疑），压迫感能显式调出来，端到端给不了。
+
+> ⚠️ 早先这里写死的是 `qwen3-tts-instruct-flash`，但百炼上这个模型名已经不存在了，
+> 请求直接返回 404 `Model not exist.`；而带语气的请求只在面试官开口时才发，
+> 结果就是"文字全在、声音全没"。现在统一用 `qwen3-tts-flash`，并且失败会自动降级成
+> 不带语气再合成一次（见 `server/voice/tts.js`），不会再整场冷场。
+> 想换模型可以用环境变量 `TTS_MODEL` / `TTS_TONE_MODEL`。
 
 ### 压迫感是怎么"说出来"的
 

@@ -72,7 +72,9 @@ export const ROLE_DEFAULTS = {
   brain: { provider: 'dashscope', model: 'qwen3.8-max' },
   quick: { provider: 'dashscope', model: 'qwen3.8-flash' },
   asr: { provider: 'dashscope', model: 'qwen3-asr-flash-realtime' },
-  tts: { provider: 'dashscope', model: 'qwen3-tts-instruct-flash' },
+  // qwen3-tts-flash 原生支持 instructions（自然语言描述语气）。
+  // 旧名字 qwen3-tts-instruct-flash 已不存在，请求会 404，别再用。
+  tts: { provider: 'dashscope', model: process.env.TTS_MODEL || 'qwen3-tts-flash' },
 }
 
 /** 拉取模型列表时要排除的非对话模型关键词 */

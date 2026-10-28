@@ -2,7 +2,7 @@
  * 语音接口 —— 浏览器只跟这里说话，DashScope 的 Key 全程不出服务端
  */
 import express from 'express'
-import { synthesize, VOICES, DEFAULT_VOICE } from '../voice/tts.js'
+import { synthesize, VOICES, DEFAULT_VOICE, ttsModelInfo } from '../voice/tts.js'
 import { transcribe, looksEmpty } from '../voice/asr.js'
 import { TONE_PRESETS, buildTone } from '../interviewer/persona.js'
 
@@ -62,10 +62,14 @@ export function mountVoice(app, wrap) {
     const out = { tts: { ok: false }, asr: { ok: false } }
     const t0 = Date.now()
     try {
-      const wav = await synthesize({ text: '在。', voice: DEFAULT_VOICE })
-      out.tts = { ok: true, bytes: wav.length, ms: Date.now() - t0 }
+      // 故意带语气去探：面试官真正走的就是这条路。
+      // 只测"无语气合成"会漏掉模型名失效这类故障 —— 之前就这么漏过一次，
+      // 健康检查全绿，面试官却一句都说不出。
+      const tone = buildTone({ pressure: 2, archetype: 'tech' })
+      const wav = await synthesize({ text: '在。', voice: DEFAULT_VOICE, tone })
+      out.tts = { ok: true, bytes: wav.length, ms: Date.now() - t0, tone: true, ...ttsModelInfo() }
     } catch (e) {
-      out.tts = { ok: false, error: String(e.message || e) }
+      out.tts = { ok: false, error: String(e.message || e), ...ttsModelInfo() }
     }
     // ASR 用刚合成的音频反过来测一次，形成闭环
     if (out.tts.ok) {

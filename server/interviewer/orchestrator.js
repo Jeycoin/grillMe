@@ -57,6 +57,25 @@ function similarity(a, b) {
   return union > 0 ? inter / union : 0
 }
 
+/**
+ * 题库可能有几百道题，但 system prompt 里只带得动 60 道。
+ * 之前是直接 slice(0,60)，等于"永远只考最新的那一批"；
+ * 题库一旦做大（比如导进来一整本八股 PDF），后面的题永远轮不到。
+ * 这里改成每场面试抽一批：题少时全带上，题多时随机取样，场场不重样。
+ */
+const MATERIAL_IN_PROMPT = 60
+
+function pickMaterial(list, n = MATERIAL_IN_PROMPT) {
+  const arr = Array.isArray(list) ? list.filter((q) => q && q.question) : []
+  if (arr.length <= n) return arr
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a.slice(0, n)
+}
+
 export class InterviewSession extends EventEmitter {
   constructor(opts = {}) {
     super()
@@ -70,7 +89,8 @@ export class InterviewSession extends EventEmitter {
     this.brain = opts.brain || ROLE_DEFAULTS.brain
     this.quick = opts.quick || ROLE_DEFAULTS.quick
     this.profile = opts.profile || getProfile()
-    this.material = opts.material || [] // 外部面经题目
+    this.materialTotal = Array.isArray(opts.material) ? opts.material.length : 0
+    this.material = pickMaterial(opts.material || []) // 外部面经题目（每场随机取样）
     this.useMemory = opts.useMemory !== false
     this.history = [] // [{ role, content }] 原始对话
     this.transcript = [] // [{ q, a, stage, at }]
@@ -108,7 +128,7 @@ export class InterviewSession extends EventEmitter {
       brain: this.brain,
       quick: this.quick,
       profile: this.profile,
-      materialCount: this.material.length,
+      materialCount: this.materialTotal ?? this.material.length,
       transcript: this.transcript,
       report: this.report,
     }

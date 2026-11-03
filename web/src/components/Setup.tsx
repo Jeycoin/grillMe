@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import type { AppConfig, MaterialSet, ModelRef, Profile, ProviderModels } from '../types'
 import type { SessionSettings } from '../App'
+import {
+  RESUME_ACCEPT,
+  analyzeResume,
+  readResumeFile,
+  type ResumeAnalysis,
+} from '../resume'
 
 interface Props {
   config: AppConfig
@@ -27,6 +33,11 @@ export default function Setup({
 }: Props) {
   const [local, setLocal] = useState<Profile>(profile)
   const [openModel, setOpenModel] = useState<null | 'brain' | 'quick'>(null)
+  /** 待确认导入的简历文件（先预览，再决定替换还是追加，避免误覆盖手写内容） */
+  const [pending, setPending] = useState<{ name: string; size: number; text: string; analysis: ResumeAnalysis } | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [resumeErr, setResumeErr] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => setLocal(profile), [profile])
 
@@ -34,6 +45,29 @@ export default function Setup({
     setLocal((p) => ({ ...p, ...patch }))
     onChangeProfile(patch)
   }
+
+  /** 选中/拖入文件后先解析成待确认状态 */
+  const stageFile = async (file: File) => {
+    setResumeErr(null)
+    try {
+      const text = await readResumeFile(file)
+      if (!text.trim()) throw new Error('这个文件是空的')
+      setPending({ name: file.name, size: file.size, text, analysis: analyzeResume(text) })
+    } catch (e) {
+      setPending(null)
+      setResumeErr(String((e as Error).message || e))
+    }
+  }
+
+  const applyPending = (mode: 'replace' | 'append') => {
+    if (!pending) return
+    const old = local.resume.trim()
+    const next = mode === 'append' && old ? `${old}\n\n${pending.text}` : pending.text
+    save({ resume: next, resumeFile: pending.name })
+    setPending(null)
+  }
+
+  const analysis = useMemo(() => analyzeResume(local.resume), [local.resume])
 
   const readyProviders = config.providers.filter((p) => p.ready)
   const canStart = readyProviders.length > 0
@@ -100,16 +134,105 @@ export default function Setup({
             />
           </div>
           <div className="field">
-            <label>简历 / 项目经历</label>
-            <textarea
-              className="textarea"
-              style={{ minHeight: 130 }}
-              value={local.resume}
-              onChange={(e) => save({ resume: e.target.value })}
-              placeholder={
-                '把你简历上的项目经历粘进来。\n\n写在简历上的每一句"负责""主导""从 0 到 1"，都会被逐个问穿。\n\n例：\n2023.06-2024.05  XX公司  后端开发\n- 主导订单系统重构，QPS 从 800 提升到 3000\n- 负责接入支付网关，日交易额 200w'
-              }
+            <div className="field-head">
+              <label htmlFor="resume-text">简历 / 项目经历（Markdown）</label>
+              <div className="field-head-actions">
+                <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
+                  上传 .md 简历
+                </button>
+                {local.resume.trim() && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => {
+                      save({ resume: '', resumeFile: '' })
+                      setPending(null)
+                      setResumeErr(null)
+                    }}
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept={RESUME_ACCEPT}
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = '' // 允许重复选同一个文件
+                if (f) void stageFile(f)
+              }}
             />
+
+            {resumeErr && <p className="resume-err">{resumeErr}</p>}
+
+            {pending && (
+              <div className="resume-pending">
+                <div className="resume-pending-main">
+                  <b>{pending.name}</b>
+                  <span className="muted">
+                    {(pending.size / 1024).toFixed(1)} KB · {pending.analysis.stats.chars} 字 ·{' '}
+                    {pending.analysis.stats.sections} 节 · {pending.analysis.stats.bullets} 条要点
+                  </span>
+                </div>
+                <div className="resume-pending-actions">
+                  <button className="btn btn-sm btn-accent" onClick={() => applyPending('replace')}>
+                    {local.resume.trim() ? '替换现有简历' : '导入这份简历'}
+                  </button>
+                  {local.resume.trim() && (
+                    <button className="btn btn-sm" onClick={() => applyPending('append')}>
+                      追加到末尾
+                    </button>
+                  )}
+                  <button className="btn btn-sm btn-ghost" onClick={() => setPending(null)}>
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div
+              className={`resume-drop${dragging ? ' on' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                const f = e.dataTransfer.files?.[0]
+                if (f) void stageFile(f)
+              }}
+            >
+              <textarea
+                id="resume-text"
+                className="textarea"
+                style={{ minHeight: 130 }}
+                value={local.resume}
+                onChange={(e) => save({ resume: e.target.value })}
+                placeholder={
+                  '把简历贴进来，或者直接把 .md 文件拖到这里 / 点右上角上传。\n\n' +
+                  '面试官会照着简历逐条问穿：写在简历上的每一句"负责""主导""从 0 到 1"、每一个数字，都会被追问到说不出话。\n\n' +
+                  '推荐格式（Markdown）：\n' +
+                  '# 张三 · 后端开发\n' +
+                  '## 工作经历\n' +
+                  '### XX 公司 · 后端开发（2023.06-2024.05）\n' +
+                  '- 主导订单系统重构，QPS 从 800 提升到 3000\n' +
+                  '## 项目经历\n' +
+                  '### 订单中台\n' +
+                  '- 负责库存预扣，Redis + Lua 保证不超卖'
+                }
+              />
+              {dragging && <div className="resume-drop-hint">松手导入 .md 简历</div>}
+            </div>
+
+            {local.resume.trim() && (
+              <ResumeSummary analysis={analysis} fileName={local.resumeFile} />
+            )}
           </div>
         </section>
 
@@ -423,6 +546,49 @@ function VoiceCard({
 
 /** 试听用的台词 —— 要能体现语气差异 */
 const SAMPLE_LINE = '你说 QPS 从 800 提到了 3000，那这个数字是怎么测出来的？'
+
+/**
+ * 简历解析结果预览。
+ * 用户上传完最想确认的是两件事：结构认没认出来、会被从哪儿开始问。
+ */
+function ResumeSummary({ analysis, fileName }: { analysis: ResumeAnalysis; fileName?: string }) {
+  const heads = analysis.sections.filter((s) => s.level <= 2).slice(0, 6)
+  if (!analysis.stats.sections && !analysis.stats.bullets) return null
+
+  return (
+    <div className="resume-summary">
+      <div className="resume-summary-head">
+        <span className="tag tag-ok">已解析</span>
+        <span className="muted">
+          {fileName ? `${fileName} · ` : ''}
+          {analysis.stats.sections} 节 · {analysis.stats.bullets} 条要点 · {analysis.stats.numbers} 处带数字
+        </span>
+      </div>
+
+      {heads.length > 0 && (
+        <div className="resume-chips">
+          {heads.map((h) => (
+            <span className="tag" key={`${h.level}-${h.heading}`}>
+              {h.heading}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {analysis.flags.length > 0 && (
+        <div className="resume-flags">
+          <div className="resume-flags-title">面试官大概率会从这几处下手</div>
+          {analysis.flags.slice(0, 6).map((f, i) => (
+            <div className="resume-flag" key={i}>
+              <span className={`tag ${f.reason === '数字' ? 'tag-accent' : 'tag-warn'}`}>{f.reason}</span>
+              <span className="resume-flag-text">{f.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function ModelPicker({
   config,

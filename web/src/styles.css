@@ -416,6 +416,135 @@ body,
   border-color: var(--danger);
 }
 
+/* ---------------- 简历上传 / 解析预览 ---------------- */
+
+.field-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.field-head > label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.field-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.resume-drop {
+  position: relative;
+  display: flex;
+}
+.resume-drop .textarea {
+  flex: 1;
+}
+.resume-drop.on .textarea {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-soft);
+}
+.resume-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: rgba(223, 240, 236, 0.72);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.resume-pending {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.resume-pending-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+.resume-pending-main b {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.resume-pending-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.resume-err {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.resume-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.resume-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.resume-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.resume-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.resume-flags-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+.resume-flag {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.resume-flag-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hr {
   height: 1px;
   background: var(--line);

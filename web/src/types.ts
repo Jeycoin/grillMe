@@ -82,6 +82,8 @@ export interface Profile {
   years: string
   jd: string
   resume: string
+  /** 简历是从哪个文件导进来的（只用于展示） */
+  resumeFile?: string
   updatedAt?: string | null
 }
 

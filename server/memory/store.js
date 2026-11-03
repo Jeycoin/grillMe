@@ -42,6 +42,7 @@ export function getProfile() {
     years: '',
     jd: '',
     resume: '',
+    resumeFile: '',
     updatedAt: null,
   })
 }

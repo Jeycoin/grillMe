@@ -12,6 +12,10 @@ import {
   buildReportPrompt,
   buildStageJudgePrompt,
   STAGES,
+  stagePlanFor,
+  stageWeight,
+  MODE_BY_ID,
+  SCENE_BY_ID,
 } from './persona.js'
 import { absorbReport, newSessionId, saveSession, getMemory, getProfile } from '../memory/store.js'
 
@@ -26,12 +30,11 @@ const MIN_TURNS_PER_STAGE = {
   reverse: 1,
 }
 
-const STAGE_ORDER = STAGES.map((s) => s.id)
-
-function nextStageOf(stage) {
-  const idx = STAGE_ORDER.indexOf(stage)
-  if (idx < 0 || idx >= STAGE_ORDER.length - 1) return 'report'
-  return STAGE_ORDER[idx + 1]
+/** 本场计划里的下一阶段（计划跑完就进收尾） */
+function nextStageIn(plan, stage) {
+  const idx = plan.indexOf(stage)
+  if (idx < 0 || idx >= plan.length - 1) return 'report'
+  return plan[idx + 1]
 }
 
 /**
@@ -76,19 +79,30 @@ function pickMaterial(list, n = MATERIAL_IN_PROMPT) {
   return a.slice(0, n)
 }
 
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
+
 export class InterviewSession extends EventEmitter {
   constructor(opts = {}) {
     super()
     this.id = opts.id || newSessionId()
     this.startedAt = new Date().toISOString()
     this.endedAt = null
-    this.stage = 'warmup'
-    this.stageTurns = 0
     this.pressure = opts.pressure ?? 2
     this.archetype = opts.archetype || 'tech'
     this.brain = opts.brain || ROLE_DEFAULTS.brain
     this.quick = opts.quick || ROLE_DEFAULTS.quick
     this.profile = opts.profile || getProfile()
+
+    // ---- 本场定制：考法 / 业务场景 / 时长 / 要不要开场自我介绍 ----
+    this.mode = MODE_BY_ID[opts.mode] ? opts.mode : 'full'
+    this.scene = SCENE_BY_ID[opts.scene] ? opts.scene : 'general'
+    this.durationMin = clamp(Number(opts.durationMin) || 30, 5, 180)
+    this.selfIntro = opts.selfIntro !== false
+    this.plan = stagePlanFor(this.mode, { selfIntro: this.selfIntro })
+    this.stage = this.plan[0]
+    this.stageTurns = 0
+    this.stageStartedAt = Date.now()
+
     this.materialTotal = Array.isArray(opts.material) ? opts.material.length : 0
     this.material = pickMaterial(opts.material || []) // 外部面经题目（每场随机取样）
     this.useMemory = opts.useMemory !== false
@@ -98,6 +112,23 @@ export class InterviewSession extends EventEmitter {
     this.busy = false
     this.forcedMove = false // 卡壳后强制换话题
     this.forcedStage = false // 换阶段后强制切话题
+  }
+
+  /* ---------------- 时间预算 ---------------- */
+
+  elapsedMin() {
+    return (Date.now() - new Date(this.startedAt).getTime()) / 60000
+  }
+
+  /** 距离本场结束还剩多少分钟（可能为负，表示已超时） */
+  timeLeftMin() {
+    return this.durationMin - this.elapsedMin()
+  }
+
+  /** 当前阶段分到的时间（按阶段的默认分钟数占比切分本场时长） */
+  stageBudgetMin(stage = this.stage) {
+    const total = this.plan.reduce((n, s) => n + stageWeight(s), 0) || 1
+    return (this.durationMin * stageWeight(stage)) / total
   }
 
   get memory() {
@@ -113,6 +144,10 @@ export class InterviewSession extends EventEmitter {
       profile: this.profile,
       memory: this.memory,
       material: this.material,
+      mode: this.mode,
+      scene: this.scene,
+      durationMin: this.durationMin,
+      timeLeftMin: Math.max(0, Math.round(this.timeLeftMin())),
     })
   }
 
@@ -125,6 +160,10 @@ export class InterviewSession extends EventEmitter {
       stage: this.stage,
       pressure: this.pressure,
       archetype: this.archetype,
+      mode: this.mode,
+      scene: this.scene,
+      durationMin: this.durationMin,
+      selfIntro: this.selfIntro,
       brain: this.brain,
       quick: this.quick,
       profile: this.profile,
@@ -140,7 +179,19 @@ export class InterviewSession extends EventEmitter {
 
   stageInfo() {
     const s = STAGES.find((x) => x.id === this.stage)
-    return { id: this.stage, name: s?.name || this.stage, turns: this.stageTurns }
+    const m = MODE_BY_ID[this.mode]
+    return {
+      id: this.stage,
+      name: s?.name || this.stage,
+      turns: this.stageTurns,
+      mode: this.mode,
+      modeName: m?.name || this.mode,
+      scene: this.scene,
+      durationMin: this.durationMin,
+      startedAt: this.startedAt,
+      timeLeftMin: Math.max(0, Math.round(this.timeLeftMin())),
+      plan: this.plan,
+    }
   }
 
   stageName() {
@@ -190,7 +241,14 @@ export class InterviewSession extends EventEmitter {
       }
 
       if (!userText) {
-        messages.push({ role: 'user', content: buildOpeningInstruction({ profile: this.profile, memory: this.memory }) })
+        messages.push({
+          role: 'user',
+          content: buildOpeningInstruction({
+            profile: this.profile,
+            memory: this.memory,
+            mode: this.mode,
+          }),
+        })
       } else {
         messages.push(...this.history)
         messages.push({ role: 'user', content: userText })
@@ -251,10 +309,25 @@ export class InterviewSession extends EventEmitter {
   /** 后台异步判阶段，结果通过事件推给前端 */
   maybeAdvanceStage() {
     if (this.stage === 'report') return
+
+    // ① 整场时间到了：直接收尾，别再开新话题
+    if (this.timeLeftMin() <= 0) {
+      this.finishByTime()
+      return
+    }
+
     const min = MIN_TURNS_PER_STAGE[this.stage] ?? 2
     if (this.stageTurns < min) return
 
-    // 该阶段已经问太久了，直接强推，不再等模型点头
+    // ② 当前阶段超出它那份时间预算太多 → 强推（自定义时长主要靠这条生效）
+    const budget = this.stageBudgetMin(this.stage)
+    const stageUsed = (Date.now() - this.stageStartedAt) / 60000
+    if (stageUsed > budget * 1.6) {
+      this.goNextStage(`当前阶段已用 ${Math.round(stageUsed)} 分钟，超出预算，强制推进`)
+      return
+    }
+
+    // ③ 该阶段已经问太久了，直接强推，不再等模型点头
     if (this.stageTurns >= min * 2 + 1) {
       this.goNextStage('本阶段耗时过长，强制推进')
       return
@@ -264,6 +337,7 @@ export class InterviewSession extends EventEmitter {
 
     const covered = this.transcript.filter((t) => t.stage === this.stage)
     const stageNow = this.stage
+    const plan = this.plan
     chat({
       provider: this.quick.provider,
       model: this.quick.model,
@@ -271,7 +345,7 @@ export class InterviewSession extends EventEmitter {
         { role: 'system', content: '你只输出 JSON，不输出任何其他内容。' },
         {
           role: 'user',
-          content: `${buildStageJudgePrompt({ stage: stageNow })}\n\n本阶段已进行 ${this.stageTurns} 轮。\n\n【本阶段问答】\n${covered
+          content: `${buildStageJudgePrompt({ stage: stageNow, plan })}\n\n本阶段已进行 ${this.stageTurns} 轮。\n\n【本阶段问答】\n${covered
             .map((t, i) => `${i + 1}. 问：${t.q}\n   答：${t.a || '（未作答）'}`)
             .join('\n')}`,
         },
@@ -285,7 +359,7 @@ export class InterviewSession extends EventEmitter {
         const parsed = safeJSON(raw)
         if (!parsed?.next) return
         // 只允许往前走一步，防止模型乱跳
-        if (parsed.next !== nextStageOf(stageNow)) return
+        if (parsed.next !== nextStageIn(plan, stageNow)) return
         if ((parsed.coverage ?? 0) < 50) return
         this.goNextStage(parsed.reason || '')
       })
@@ -294,10 +368,25 @@ export class InterviewSession extends EventEmitter {
 
   goNextStage(reason) {
     if (this.stage === 'report') return
-    const next = nextStageOf(this.stage)
+    const next = nextStageIn(this.plan, this.stage)
     this.stage = next
     this.stageTurns = 0
-    this.forcedStage = true // 下一轮强制把话题切过去
+    this.stageStartedAt = Date.now()
+    this.forcedStage = next !== 'report' // 下一轮强制把话题切过去
+    this.persist()
+    this.emit('event', { type: 'stage', stage: this.stageInfo(), reason })
+  }
+
+  /**
+   * 时间到：不管还剩几个阶段，直接进收尾。
+   * 收尾阶段里面试官只会说一句结束语（评分报告仍然要用户点「结束并评分」才生成）。
+   */
+  finishByTime(reason = '时间到，进入收尾') {
+    if (this.stage === 'report') return
+    this.stage = 'report'
+    this.stageTurns = 0
+    this.stageStartedAt = Date.now()
+    this.forcedStage = false
     this.persist()
     this.emit('event', { type: 'stage', stage: this.stageInfo(), reason })
   }

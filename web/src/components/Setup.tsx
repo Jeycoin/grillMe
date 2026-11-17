@@ -25,6 +25,7 @@ export default function Setup({
   config,
   profile,
   settings,
+  materials,
   enabledCount,
   onChangeProfile,
   onChangeSettings,
@@ -236,10 +237,105 @@ export default function Setup({
           </div>
         </section>
 
-        {/* 2 强度 */}
+        {/* 2 面试设置 */}
         <section className="card">
           <div className="card-head">
             <span className="card-num">2</span>
+            <span className="card-title">面试设置</span>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              只练一块也行，全流程也行
+            </span>
+          </div>
+
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label>本场考法</label>
+            <div className="pills">
+              {(config.modes || []).map((m) => (
+                <button
+                  key={m.id}
+                  className={`pill${settings.mode === m.id ? ' on' : ''}`}
+                  title={m.desc}
+                  onClick={() => onChangeSettings({ ...settings, mode: m.id })}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
+              {(config.modes || []).find((m) => m.id === settings.mode)?.desc}
+            </p>
+          </div>
+
+          <div className="grid-2" style={{ gap: 14, marginBottom: 14 }}>
+            <div className="field">
+              <label>面试时长</label>
+              <div className="pills">
+                {[10, 20, 30, 45, 60].map((n) => (
+                  <button
+                    key={n}
+                    className={`pill${settings.durationMin === n ? ' on' : ''}`}
+                    onClick={() => onChangeSettings({ ...settings, durationMin: n })}
+                  >
+                    {n} 分钟
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="range"
+                  min={5}
+                  max={120}
+                  step={5}
+                  value={settings.durationMin}
+                  onChange={(e) => onChangeSettings({ ...settings, durationMin: Number(e.target.value) })}
+                  style={{ flex: 1, accentColor: 'var(--accent)' }}
+                />
+                <span className="mono" style={{ fontSize: 13, minWidth: 58, textAlign: 'right' }}>
+                  {settings.durationMin} 分钟
+                </span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>业务场景</label>
+              <div className="pills">
+                {(config.scenes || []).map((s) => (
+                  <button
+                    key={s.id}
+                    className={`pill${settings.scene === s.id ? ' on' : ''}`}
+                    title={s.hint}
+                    onClick={() => onChangeSettings({ ...settings, scene: s.id })}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
+                {(config.scenes || []).find((s) => s.id === settings.scene)?.hint || '不限定业务领域'}
+              </p>
+            </div>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={settings.selfIntro}
+              onChange={(e) => onChangeSettings({ ...settings, selfIntro: e.target.checked })}
+              style={{ marginTop: 4, accentColor: 'var(--accent)' }}
+            />
+            <span style={{ fontSize: 13 }}>
+              开场先做自我介绍
+              <span className="muted" style={{ display: 'block', fontSize: 12.5 }}>
+                关掉的话直接进正题，一上来就挨问（只选单一考法时尤其适合关掉）。
+              </span>
+            </span>
+          </label>
+        </section>
+
+        {/* 3 强度 */}
+        <section className="card">
+          <div className="card-head">
+            <span className="card-num">3</span>
             <span className="card-title">拷打强度</span>
           </div>
           <div className="pressure-list">
@@ -261,10 +357,10 @@ export default function Setup({
           </div>
         </section>
 
-        {/* 3 面试官类型 */}
+        {/* 4 面试官类型 */}
         <section className="card">
           <div className="card-head">
-            <span className="card-num">3</span>
+            <span className="card-num">4</span>
             <span className="card-title">面试官类型</span>
           </div>
           <div className="pills">
@@ -284,10 +380,10 @@ export default function Setup({
           </p>
         </section>
 
-        {/* 4 大脑 */}
+        {/* 5 大脑 */}
         <section className="card">
           <div className="card-head">
-            <span className="card-num">4</span>
+            <span className="card-num">5</span>
             <span className="card-title">面试官大脑</span>
             <div className="topbar-spacer" />
             <button className="btn btn-sm btn-ghost" onClick={() => setOpenModel(openModel ? null : 'brain')}>
@@ -314,10 +410,10 @@ export default function Setup({
           )}
         </section>
 
-        {/* 5 面经 */}
+        {/* 6 面经 */}
         <section className="card">
           <div className="card-head">
-            <span className="card-num">5</span>
+            <span className="card-num">6</span>
             <span className="card-title">外部面经</span>
             <div className="topbar-spacer" />
             <button className="btn btn-sm" onClick={onOpenMaterial}>
@@ -326,18 +422,60 @@ export default function Setup({
           </div>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
             {enabledCount > 0
-              ? `已启用 ${enabledCount} 道题，面试官会优先从这些真实面经里出题。`
+              ? `本场 ${enabledCount} 道题，面试官会优先从这些真实面经里出题。`
               : '还没加载面经。可以贴牛客/掘金/小红书链接自动抽取，也可以直接粘文本。'}
           </p>
+
+          {materials.length > 0 && (
+            <div className="mat-pick">
+              <div className="mat-pick-head">
+                <span className="mat-pick-title">本场只问这些</span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {settings.materialIds ? '已手选（只在本次生效）' : '跟随面经库的启用项'}
+                </span>
+                <div style={{ flex: 1 }} />
+                {settings.materialIds && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => onChangeSettings({ ...settings, materialIds: null })}
+                  >
+                    恢复默认
+                  </button>
+                )}
+              </div>
+              <div className="mat-chips">
+                {materials.map((m) => {
+                  const on = settings.materialIds ? settings.materialIds.includes(m.id) : m.enabled
+                  return (
+                    <button
+                      key={m.id}
+                      className={`chip${on ? ' on' : ''}`}
+                      title={`${m.questions.length} 题 · ${m.source}`}
+                      onClick={() => {
+                        // 第一次点就从"当前生效的集合"开始改，避免一下清空
+                        const base = settings.materialIds ?? materials.filter((x) => x.enabled).map((x) => x.id)
+                        const next = on ? base.filter((id) => id !== m.id) : [...base, m.id]
+                        onChangeSettings({ ...settings, materialIds: next })
+                      }}
+                    >
+                      <span className="chip-dot" />
+                      {m.title.replace(/^八股 · /, '')}
+                      <span className="chip-n">{m.questions.length}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
-        {/* 6 语音 */}
+        {/* 7 语音 */}
         <VoiceCard config={config} settings={settings} onChangeSettings={onChangeSettings} />
 
-        {/* 7 记忆 */}
+        {/* 8 记忆 */}
         <section className="card">
           <div className="card-head">
-            <span className="card-num">7</span>
+            <span className="card-num">8</span>
             <span className="card-title">长期记忆</span>
           </div>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
@@ -421,7 +559,7 @@ function VoiceCard({
   return (
     <section className="card">
       <div className="card-head">
-        <span className="card-num">6</span>
+        <span className="card-num">7</span>
         <span className="card-title">语音对话</span>
         <div className="topbar-spacer" />
         {available ? (

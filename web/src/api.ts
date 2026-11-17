@@ -46,6 +46,14 @@ export const api = {
   createSession: (opts: {
     pressure: number
     archetype: string
+    /** 本场考法：full / bagu / resume / scene / coding / behavior */
+    mode?: string
+    /** 业务场景 id */
+    scene?: string
+    /** 计划时长（分钟） */
+    durationMin?: number
+    /** 要不要开场自我介绍 */
+    selfIntro?: boolean
     brain?: ModelRef
     quick?: ModelRef
     material?: { question: string; tags?: string[]; company?: string; source?: string }[]

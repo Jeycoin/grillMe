@@ -89,6 +89,9 @@ export function listSessions(limit = 50) {
       stage: s.stage,
       pressure: s.pressure,
       archetype: s.archetype,
+      mode: s.mode || 'full',
+      scene: s.scene || 'general',
+      durationMin: s.durationMin ?? null,
       turns: s.transcript?.length || 0,
       report: s.report || null,
     }))

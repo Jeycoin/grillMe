@@ -11,7 +11,7 @@ import { unlockAudio } from './audio/recorder'
 
 export type Phase = 'setup' | 'interview' | 'report'
 
-/* ---------- 语音偏好的本地记忆（跟浏览器绑定，不需要上服务端） ---------- */
+/* ---------- 面试偏好的本地记忆（跟浏览器绑定，不需要上服务端） ---------- */
 
 const VOICE_PREF_KEY = 'kewenguan.voice-prefs.v1'
 
@@ -20,6 +20,13 @@ interface VoicePrefs {
   voiceId?: string
   autoListen?: boolean
   autoSubmit?: boolean
+  /** 下面这些是"上一场怎么配的"，下次打开直接沿用，省得每次重选 */
+  mode?: string
+  scene?: string
+  durationMin?: number
+  selfIntro?: boolean
+  pressure?: number
+  archetype?: string
 }
 
 function readVoicePrefs(): VoicePrefs {
@@ -41,6 +48,16 @@ function writeVoicePrefs(p: VoicePrefs) {
 export interface SessionSettings {
   pressure: number
   archetype: string
+  /** 本场考法：full / bagu / resume / scene / coding / behavior */
+  mode: string
+  /** 业务场景 id */
+  scene: string
+  /** 计划时长（分钟） */
+  durationMin: number
+  /** 要不要开场自我介绍 */
+  selfIntro: boolean
+  /** 本场只用这些面经集；null = 跟随面经库的启用项 */
+  materialIds: string[] | null
   brain: ModelRef
   quick: ModelRef
   useMemory: boolean
@@ -98,8 +115,13 @@ export default function App() {
           if (s) return s
           const saved = readVoicePrefs()
           return {
-            pressure: 2,
-            archetype: 'tech',
+            pressure: saved.pressure ?? 2,
+            archetype: saved.archetype ?? 'tech',
+            mode: saved.mode || 'full',
+            scene: saved.scene || 'general',
+            durationMin: saved.durationMin ?? 30,
+            selfIntro: saved.selfIntro ?? true,
+            materialIds: null,
             brain: cfg.roleDefaults.brain,
             quick: cfg.roleDefaults.quick,
             useMemory: true,
@@ -119,7 +141,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* 语音偏好落本地，下次打开还记住 */
+  /* 面试偏好落本地，下次打开还记住 */
   useEffect(() => {
     if (!settings) return
     writeVoicePrefs({
@@ -127,13 +149,32 @@ export default function App() {
       voiceId: settings.voiceId,
       autoListen: settings.autoListen,
       autoSubmit: settings.autoSubmit,
+      mode: settings.mode,
+      scene: settings.scene,
+      durationMin: settings.durationMin,
+      selfIntro: settings.selfIntro,
+      pressure: settings.pressure,
+      archetype: settings.archetype,
     })
-  }, [settings?.voiceOn, settings?.voiceId, settings?.autoListen, settings?.autoSubmit])
+  }, [
+    settings?.voiceOn,
+    settings?.voiceId,
+    settings?.autoListen,
+    settings?.autoSubmit,
+    settings?.mode,
+    settings?.scene,
+    settings?.durationMin,
+    settings?.selfIntro,
+    settings?.pressure,
+    settings?.archetype,
+  ])
 
   const enabledMaterial = useMemo(() => {
     const flat: { question: string; tags: string[]; company?: string; source?: string }[] = []
+    // materialIds 是本场手选的面经集；null 表示跟随面经库的启用项
+    const picked = settings?.materialIds ? new Set(settings.materialIds) : null
     for (const m of materials) {
-      if (!m.enabled) continue
+      if (picked ? !picked.has(m.id) : !m.enabled) continue
       for (const q of m.questions) {
         flat.push({
           question: q.question,
@@ -144,7 +185,7 @@ export default function App() {
       }
     }
     return flat
-  }, [materials])
+  }, [materials, settings?.materialIds])
 
   const start = useCallback(async () => {
     if (!settings) return
@@ -158,6 +199,10 @@ export default function App() {
       const r = await api.createSession({
         pressure: settings.pressure,
         archetype: settings.archetype,
+        mode: settings.mode,
+        scene: settings.scene,
+        durationMin: settings.durationMin,
+        selfIntro: settings.selfIntro,
         brain: settings.brain,
         quick: settings.quick,
         material: enabledMaterial,
@@ -250,6 +295,7 @@ export default function App() {
           sessionId={sessionId}
           settings={settings}
           stages={config.stages}
+          config={config}
           onFinish={finish}
           push={push}
           sayStream={sayStream}

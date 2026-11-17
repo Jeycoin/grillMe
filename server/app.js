@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import { SERVER, ROOT, publicConfig, providerReady, PROVIDERS } from './config.js'
 import { listAllModels, pingProvider } from './providers/index.js'
 import { createSession, getLiveSession, dropSession } from './interviewer/orchestrator.js'
-import { STAGES, PRESSURE_LEVELS, ARCHETYPES, TONE_PRESETS } from './interviewer/persona.js'
+import { STAGES, PRESSURE_LEVELS, ARCHETYPES, TONE_PRESETS, INTERVIEW_MODES, INTERVIEW_SCENES } from './interviewer/persona.js'
 import { VOICES, DEFAULT_VOICE } from './voice/tts.js'
 import {
   getProfile,
@@ -45,6 +45,8 @@ export function buildApp() {
       stages: STAGES,
       pressureLevels: Object.values(PRESSURE_LEVELS),
       archetypes: Object.values(ARCHETYPES),
+      modes: INTERVIEW_MODES,
+      scenes: INTERVIEW_SCENES,
       memory: getMemoryStats(),
       materials: statsMaterials(),
       mcpServers: listServers(),
@@ -90,6 +92,10 @@ export function buildApp() {
     const session = createSession({
       pressure: b.pressure,
       archetype: b.archetype,
+      mode: b.mode,
+      scene: b.scene,
+      durationMin: b.durationMin,
+      selfIntro: b.selfIntro,
       brain,
       quick: b.quick,
       material: b.material || [],

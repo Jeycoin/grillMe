@@ -14,6 +14,22 @@ export interface StageInfo {
   minutes: number
 }
 
+/** 本场考法：只问八股 / 只问简历 / 只问场景… */
+export interface InterviewMode {
+  id: string
+  name: string
+  desc: string
+  stages: string[]
+  brief: string
+}
+
+/** 业务场景：让题目落在熟悉的领域 */
+export interface InterviewScene {
+  id: string
+  name: string
+  hint: string
+}
+
 export interface PressureLevel {
   id: number
   name: string
@@ -55,6 +71,8 @@ export interface AppConfig {
   stages: StageInfo[]
   pressureLevels: PressureLevel[]
   archetypes: Archetype[]
+  modes?: InterviewMode[]
+  scenes?: InterviewScene[]
   memory: { sessionCount: number; weakPointCount: number; updatedAt: string | null }
   materials?: { sets: number; total: number; enabled: number }
   mcpServers: { name: string; transport: string; command: string }[]

@@ -545,6 +545,75 @@ body,
   white-space: nowrap;
 }
 
+/* ---------------- 面经：本场手选 ---------------- */
+
+.mat-pick {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.mat-pick-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mat-pick-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.mat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.chip:hover {
+  border-color: var(--line-2);
+}
+.chip.on {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: var(--accent-line);
+}
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+.chip.on .chip-dot {
+  opacity: 1;
+}
+.chip-n {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  opacity: 0.65;
+}
+
 .hr {
   height: 1px;
   background: var(--line);
@@ -914,6 +983,18 @@ body,
 /* ============================================================
    面试页
    ============================================================ */
+
+/* 本场设置摘要条（考法 / 场景 / 倒计时） */
+.interview-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 9px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  flex-shrink: 0;
+}
 
 .stage-bar {
   display: flex;

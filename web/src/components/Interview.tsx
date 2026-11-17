@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SayEvent } from '../api'
-import type { StageInfo } from '../types'
+import type { AppConfig, StageInfo } from '../types'
 import type { SessionSettings } from '../App'
 import { useVoice } from '../audio/useVoice'
 import { unlockAudio } from '../audio/recorder'
@@ -17,6 +17,7 @@ interface Props {
   sessionId: string
   settings: SessionSettings
   stages: StageInfo[]
+  config: AppConfig
   onFinish: () => void
   push: (t: string, k?: 'info' | 'err') => void
   sayStream: (
@@ -27,14 +28,20 @@ interface Props {
   ) => Promise<void>
 }
 
-export default function Interview({ sessionId, settings, stages, onFinish, push, sayStream }: Props) {
+export default function Interview({ sessionId, settings, stages, config, onFinish, push, sayStream }: Props) {
   const [exchanges, setExchanges] = useState<Ex[]>([])
   const [streaming, setStreaming] = useState('')
   const [busy, setBusy] = useState(false)
-  const [stage, setStage] = useState('warmup')
+  // 起始阶段要跟本场计划一致：选「只问八股」时第一句就已经是八股，不该还标着"开场与自我介绍"
+  const [stage, setStage] = useState<string>(() => {
+    if (settings.selfIntro) return 'warmup'
+    const m = config.modes?.find((x) => x.id === settings.mode)
+    return m?.stages?.[0] || 'warmup'
+  })
   const [draft, setDraft] = useState('')
   const [opening, setOpening] = useState(true)
   const [voiceOn, setVoiceOn] = useState(settings.voiceOn)
+  const [now, setNow] = useState(() => Date.now())
 
   const idRef = useRef(1)
   const abortRef = useRef<AbortController | null>(null)
@@ -43,6 +50,13 @@ export default function Interview({ sessionId, settings, stages, onFinish, push,
   const startedRef = useRef(false)
   const busyRef = useRef(false)
   const endedRef = useRef(false)
+  /** 本场预计结束时刻（用来显示倒计时） */
+  const endAtRef = useRef(Date.now() + settings.durationMin * 60000)
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15000)
+    return () => clearInterval(t)
+  }, [])
 
   /* ---------------- 语音 ---------------- */
 
@@ -203,6 +217,23 @@ export default function Interview({ sessionId, settings, stages, onFinish, push,
   const answered = useMemo(() => exchanges.filter((e) => e.a).length, [exchanges])
   const pressureName = PRESSURE_LABELS[settings.pressure] || ''
 
+  /** 本场计划跑的阶段：跟服务端 stagePlanFor 保持一致 */
+  const planStages = useMemo(() => {
+    const m = config.modes?.find((x) => x.id === settings.mode)
+    let ids = m?.stages?.length ? [...m.stages] : stages.map((s) => s.id)
+    if (settings.selfIntro) {
+      if (!ids.includes('warmup')) ids = ['warmup', ...ids]
+    } else {
+      ids = ids.filter((s) => s !== 'warmup')
+    }
+    return stages.filter((s) => ids.includes(s.id))
+  }, [config.modes, settings.mode, settings.selfIntro, stages])
+
+  const modeName = config.modes?.find((m) => m.id === settings.mode)?.name || '全流程'
+  const sceneName = config.scenes?.find((s) => s.id === settings.scene && s.id !== 'general')?.name || ''
+  const leftMin = Math.max(0, Math.ceil((endAtRef.current - now) / 60000))
+  const timeUp = leftMin <= 0
+
   const micState: 'off' | 'idle' | 'listening' | 'transcribing' = !voice.supported
     ? 'off'
     : voice.transcribing
@@ -213,7 +244,19 @@ export default function Interview({ sessionId, settings, stages, onFinish, push,
 
   return (
     <>
-      <StageBar stages={stages} current={stage} />
+      <div className="interview-meta">
+        <span className="tag tag-brand">{modeName}</span>
+        {sceneName && <span className="tag">{sceneName}</span>}
+        <span className={`tag${timeUp ? ' tag-warn' : leftMin <= 3 ? ' tag-warn' : ''}`}>
+          {timeUp ? '时间到 · 可以结束了' : `剩余 ${leftMin} 分钟`}
+        </span>
+        <div style={{ flex: 1 }} />
+        <span className="muted" style={{ fontSize: 12 }}>
+          计划 {settings.durationMin} 分钟
+        </span>
+      </div>
+
+      <StageBar stages={planStages} current={stage} />
 
       {/* 宽屏：左对话 / 右作答区；窄屏自动变成上下结构 */}
       <div className="interview-grid has-side">

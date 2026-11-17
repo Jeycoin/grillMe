@@ -124,6 +124,90 @@ export const STAGES = [
 
 const STAGE_GOAL = Object.fromEntries(STAGES.map((s) => [s.id, s]))
 
+/* ------------------------------------------------------------------
+ * 面试模式 & 业务场景
+ *
+ * 之前的"一场面试"是写死的 8 个阶段全跑一遍。实际用起来需求很杂：
+ * 有人只想被八股拷打，有人只要练场景题，有人二面只考算法。
+ * 这里把"跑哪些阶段"抽成模式，时间预算和 prompt 都跟着模式走。
+ * ------------------------------------------------------------------ */
+
+export const INTERVIEW_MODES = [
+  {
+    id: 'full',
+    name: '全流程',
+    desc: '自我介绍 → 简历深挖 → 八股 → 场景 → 算法 → 行为面 → 反问',
+    stages: ['warmup', 'resume', 'knowledge', 'design', 'coding', 'behavior', 'reverse'],
+    brief: '按完整面试流程走，每一段都要覆盖，但不要在某一段恋战。',
+  },
+  {
+    id: 'bagu',
+    name: '只问八股',
+    desc: '不聊项目，直接从题库里挑知识点一道接一道往深里问',
+    stages: ['knowledge'],
+    brief: '本场只考技术八股。不要问项目细节、不要让人自我介绍，直接出知识点，一道接一道往深里追。',
+  },
+  {
+    id: 'resume',
+    name: '只问简历',
+    desc: '照着简历逐条问穿：数字、职责边界、技术选型',
+    stages: ['resume'],
+    brief: '本场只打简历。不要问八股知识点，所有问题都必须来自简历里的具体经历、数字和职责。',
+  },
+  {
+    id: 'scene',
+    name: '只问场景题',
+    desc: '给开放场景，考结构化思维、取舍和落地能力',
+    stages: ['design'],
+    brief: '本场只出场景设计题。给一个真实业务场景，逼候选人讲清方案、取舍、边界和上线后的风险。',
+  },
+  {
+    id: 'coding',
+    name: '只问算法',
+    desc: '口述思路 + 追问复杂度、边界、优化',
+    stages: ['coding'],
+    brief: '本场只考算法。让候选人口述思路，然后追问复杂度、边界条件和优化方向，不要让他真的敲代码。',
+  },
+  {
+    id: 'behavior',
+    name: '只问行为面',
+    desc: 'STAR 追问协作、冲突、失败复盘（HR 视角）',
+    stages: ['behavior'],
+    brief: '本场只做行为面。用 STAR 追协作、冲突、失败复盘，不要问技术细节和八股。',
+  },
+]
+
+export const MODE_BY_ID = Object.fromEntries(INTERVIEW_MODES.map((m) => [m.id, m]))
+
+/** 业务场景 —— 让题目落在候选人熟悉的领域里 */
+export const INTERVIEW_SCENES = [
+  { id: 'general', name: '通用', hint: '' },
+  { id: 'ecommerce', name: '电商交易', hint: '订单、库存、秒杀、超卖、对账、履约' },
+  { id: 'payment', name: '支付金融', hint: '幂等、最终一致性、对账、资金安全、风控' },
+  { id: 'social', name: '社交内容', hint: 'Feed 流、关系链、消息推送、内容审核' },
+  { id: 'ai', name: 'AI 应用', hint: 'RAG、Agent、评测、成本与延迟、幻觉治理' },
+  { id: 'infra', name: '基础架构', hint: '高可用、容量规划、发布回滚、故障演练' },
+]
+
+export const SCENE_BY_ID = Object.fromEntries(INTERVIEW_SCENES.map((s) => [s.id, s]))
+
+/**
+ * 本场要跑哪些阶段。
+ * selfIntro=false 时去掉开场，直接进正题（想直接挨打的人用）。
+ */
+export function stagePlanFor(mode = 'full', { selfIntro = true } = {}) {
+  const m = MODE_BY_ID[mode] || INTERVIEW_MODES[0]
+  let plan = [...m.stages]
+  if (!selfIntro) plan = plan.filter((s) => s !== 'warmup')
+  else if (!plan.includes('warmup')) plan.unshift('warmup')
+  return plan.length ? plan : ['knowledge']
+}
+
+/** 阶段在本场时间预算里占的权重（按默认分钟数归一） */
+export function stageWeight(stage) {
+  return Math.max(1, STAGE_GOAL[stage]?.minutes ?? 5)
+}
+
 function fmtProfile(profile) {
   if (!profile) return '（候选人未提供简历信息，请在开场时主动索要并从中提取弹药）'
   const parts = []
@@ -240,11 +324,55 @@ export function buildSystemPrompt(ctx = {}) {
     memory = null,
     material = null,
     language = 'zh',
+    mode = 'full',
+    scene = 'general',
+    durationMin = 30,
+    timeLeftMin = null,
   } = ctx
 
   const sg = STAGE_GOAL[stage] || STAGE_GOAL.warmup
   const materialBlock = fmtMaterial(material)
   const memoryBlock = fmtMemory(memory)
+
+  // 本场考法：模式决定了能聊什么、不能聊什么
+  const m = MODE_BY_ID[mode] || INTERVIEW_MODES[0]
+  const hasResume = Boolean(String(profile?.resume || '').trim())
+  const modeBlock = `
+【本场考法：${m.name}】
+${m.brief}
+${
+  mode === 'full'
+    ? ''
+    : '候选人已经明确选了这一种考法，就算你手痒想换话题也要忍住：只问这一种，问了别的就是跑题。'
+}${
+    mode === 'resume' && !hasResume
+      ? '\n注意：候选人这次没有填简历。先让他用两三句话讲清最近一段经历（做了什么、什么指标），然后顺着挖；绝对不要凭空编造"你简历上写着…"，那是幻觉。'
+      : ''
+  }`
+
+  // 业务场景：把题目拽到候选人熟的领域
+  const sc = SCENE_BY_ID[scene] || INTERVIEW_SCENES[0]
+  const sceneBlock = sc.hint
+    ? `
+【业务场景：${sc.name}】
+本场面试围绕「${sc.hint}」这些业务来问。出场景题、举例、追问时都往这个领域里落，
+不要泛泛地谈"高并发"这种空话。候选人简历里的项目如果刚好是这个领域，优先拿它开刀。
+`
+    : ''
+
+  // 时间预算：让模型自己按剩余时间控节奏，而不是闷头追问
+  const left = typeof timeLeftMin === 'number' ? Math.max(0, Math.round(timeLeftMin)) : null
+  const timeBlock =
+    left === null
+      ? ''
+      : `
+【时间预算】
+本场计划 ${durationMin} 分钟，现在还剩约 ${left} 分钟。
+- 剩得多：按阶段推进，每个点该追几层就追几层。
+- 剩不到三分之一：加快节奏，一个点最多追两层，该换话题就换。
+- 剩不到 3 分钟：主动收尾，说一句"今天就到这儿"之类的话，不要再开新话题、也不要再出大题。
+${left <= 0 ? '- 已经超时：这一轮必须收尾，直接结束，不要提问。' : ''}
+`
 
   // 有简历时，简历就是本场的主战场：先挑弹药，再逐条问穿
   const resumeBlock = String(profile?.resume || '').trim()
@@ -271,7 +399,7 @@ ${OUTPUT_DISCIPLINE}
 当前阶段建议时长：${sg.minutes} 分钟${
     sg.minutes === 0 ? '（这是收尾，直接进入总评）' : '（超时未达标就直接切下一阶段，不要恋战）'
   }
-
+${modeBlock}${sceneBlock}${timeBlock}
 【候选人档案】
 ${fmtProfile(profile)}
 ${resumeBlock}${memoryBlock ? `\n【长期记忆 · 关于这个人的历史】\n${memoryBlock}\n\n注意：如果存在历史薄弱项，你要在本次面试中**主动、优先地**回到这些方向进攻。开场时可以用一句话体现你记得他，比如"上次 XX 那块你没答明白，今天我们先从那儿开始"。` : ''}
@@ -285,9 +413,20 @@ ${materialBlock ? `\n${materialBlock}\n\n注意：从题库出题时要自然融
 
 /** 开场指令 */
 export function buildOpeningInstruction(ctx = {}) {
-  const { profile, memory } = ctx
+  const { profile, memory, mode = 'full' } = ctx
   const hasProfile = Boolean(profile?.targetRole || profile?.resume)
   const hasMemory = Boolean(memory?.weakPoints?.length)
+
+  // 单选了某种考法的人，不想先在自我介绍上浪费十分钟
+  const direct = {
+    bagu: '直接出第一个八股问题：从题库里挑一个核心知识点，一句话问出来。不要寒暄、不要问自我介绍、不要解释流程。',
+    resume: '直接指着简历里的一个具体点开问（某个数字、某段职责）。不要寒暄、不要让对方再自我介绍了。',
+    scene: '直接给出一个具体的业务场景（一两句话说清约束），让候选人开始设计。不要寒暄。',
+    coding: '直接出一道算法题，说清输入输出和约束，让候选人口述思路。不要寒暄。',
+    behavior: '直接问一个行为面问题（比如最近一次和同事的冲突），让候选人用 STAR 讲。不要寒暄。',
+  }[mode]
+
+  if (direct) return `现在面试开始，轮到你开口了。\n${direct}`
 
   return `现在面试开始，轮到你开口了。
 ${
@@ -330,11 +469,18 @@ ${(ctx.transcript || []).map((t, i) => `${i + 1}. 面试官：${t.q}\n   候选�
 
 /** 阶段推进判断 */
 export function buildStageJudgePrompt(ctx = {}) {
-  const list = STAGES.filter((s) => s.id !== 'report').map((s) => `${s.id}=${s.name}`).join('、')
+  const plan = Array.isArray(ctx.plan) && ctx.plan.length
+    ? ctx.plan
+    : STAGES.filter((s) => s.id !== 'report').map((s) => s.id)
+  const list = plan.map((id) => `${id}=${STAGE_GOAL[id]?.name || id}`).join('、')
+  const idx = plan.indexOf(ctx.stage)
+  const nextHint = idx >= 0 && idx < plan.length - 1 ? `下一阶段只能是：${plan[idx + 1]}` : '已经是最后阶段，不要再推进'
+
   return `你是面试流程调度器。根据当前阶段的问答记录，判断是否应该推进到下一阶段。
 
-可选阶段：${list}
+本场阶段顺序：${list}
 当前阶段：${ctx.stage}
+${nextHint}
 
 判断标准：当前阶段目标是否已达成，或已明显超时 / 候选人已无话可说。
 

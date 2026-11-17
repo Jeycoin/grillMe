@@ -56,8 +56,8 @@ export interface SessionSettings {
   durationMin: number
   /** 要不要开场自我介绍 */
   selfIntro: boolean
-  /** 本场只用这些面经集；null = 跟随面经库的启用项 */
-  materialIds: string[] | null
+  /** 本场要用的面经集（默认空 = 一道题都不用） */
+  materialIds: string[]
   brain: ModelRef
   quick: ModelRef
   useMemory: boolean
@@ -121,7 +121,7 @@ export default function App() {
             scene: saved.scene || 'general',
             durationMin: saved.durationMin ?? 30,
             selfIntro: saved.selfIntro ?? true,
-            materialIds: null,
+            materialIds: [],
             brain: cfg.roleDefaults.brain,
             quick: cfg.roleDefaults.quick,
             useMemory: true,
@@ -171,10 +171,11 @@ export default function App() {
 
   const enabledMaterial = useMemo(() => {
     const flat: { question: string; tags: string[]; company?: string; source?: string }[] = []
-    // materialIds 是本场手选的面经集；null 表示跟随面经库的启用项
-    const picked = settings?.materialIds ? new Set(settings.materialIds) : null
+    // 本场手选的面经集：默认不选 = 不加载任何题库
+    const picked = new Set(settings?.materialIds ?? [])
+    if (picked.size === 0) return flat
     for (const m of materials) {
-      if (picked ? !picked.has(m.id) : !m.enabled) continue
+      if (!picked.has(m.id)) continue
       for (const q of m.questions) {
         flat.push({
           question: q.question,

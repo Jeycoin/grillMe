@@ -62,7 +62,7 @@ export default function MaterialPanel({ materials, config, onChange, onClose, pu
           <span className="tag">
             {materials.length} 份 / {totalQ} 题
           </span>
-          {enabledQ > 0 && <span className="tag tag-ok">启用 {enabledQ}</span>}
+          {enabledQ > 0 && <span className="tag tag-ok">库内启用 {enabledQ}</span>}
           <div className="topbar-spacer" />
           <a
             className="btn btn-sm btn-ghost"
@@ -77,6 +77,9 @@ export default function MaterialPanel({ materials, config, onChange, onClose, pu
         </div>
 
         <div className="drawer-body">
+          <p className="muted" style={{ margin: '0 0 12px', fontSize: 12.5, lineHeight: 1.6 }}>
+            这里的勾选只是库内整理。本场到底用哪些题库，去开始面试页的「本场只问这些」里勾。
+          </p>
           <div className="pills" style={{ marginBottom: 14 }}>
             <button className={`pill${tab === 'url' ? ' on' : ''}`} onClick={() => setTab('url')}>
               链接导入

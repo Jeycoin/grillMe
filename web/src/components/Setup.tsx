@@ -70,6 +70,10 @@ export default function Setup({
 
   const analysis = useMemo(() => analyzeResume(local.resume), [local.resume])
 
+  /** 本场手选的面经集（默认一个都不选，勾上才生效） */
+  const selectedIds = useMemo(() => new Set(settings.materialIds), [settings.materialIds])
+  const selectedCount = selectedIds.size
+
   const readyProviders = config.providers.filter((p) => p.ready)
   const canStart = readyProviders.length > 0
 
@@ -421,9 +425,11 @@ export default function Setup({
             </button>
           </div>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            {enabledCount > 0
-              ? `本场 ${enabledCount} 道题，面试官会优先从这些真实面经里出题。`
-              : '还没加载面经。可以贴牛客/掘金/小红书链接自动抽取，也可以直接粘文本。'}
+            {materials.length === 0
+              ? '还没加载面经。可以贴牛客/掘金/小红书链接自动抽取，也可以直接粘文本。'
+              : enabledCount > 0
+                ? `本场 ${enabledCount} 道题，面试官会优先从这些真实面经里出题。`
+                : '本场没有选题：面试官不会用面经题库，只凭经验和你的简历问。'}
           </p>
 
           {materials.length > 0 && (
@@ -431,30 +437,38 @@ export default function Setup({
               <div className="mat-pick-head">
                 <span className="mat-pick-title">本场只问这些</span>
                 <span className="muted" style={{ fontSize: 12 }}>
-                  {settings.materialIds ? '已手选（只在本次生效）' : '跟随面经库的启用项'}
+                  默认不选，勾上才生效（只影响本场）
                 </span>
                 <div style={{ flex: 1 }} />
-                {settings.materialIds && (
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    onClick={() => onChangeSettings({ ...settings, materialIds: null })}
-                  >
-                    恢复默认
-                  </button>
-                )}
+                <button
+                  className="btn btn-sm"
+                  onClick={() =>
+                    onChangeSettings({ ...settings, materialIds: materials.map((m) => m.id) })
+                  }
+                  disabled={selectedCount === materials.length}
+                >
+                  全选
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => onChangeSettings({ ...settings, materialIds: [] })}
+                  disabled={selectedCount === 0}
+                >
+                  清空
+                </button>
               </div>
               <div className="mat-chips">
                 {materials.map((m) => {
-                  const on = settings.materialIds ? settings.materialIds.includes(m.id) : m.enabled
+                  const on = selectedIds.has(m.id)
                   return (
                     <button
                       key={m.id}
                       className={`chip${on ? ' on' : ''}`}
                       title={`${m.questions.length} 题 · ${m.source}`}
                       onClick={() => {
-                        // 第一次点就从"当前生效的集合"开始改，避免一下清空
-                        const base = settings.materialIds ?? materials.filter((x) => x.enabled).map((x) => x.id)
-                        const next = on ? base.filter((id) => id !== m.id) : [...base, m.id]
+                        const next = on
+                          ? settings.materialIds.filter((id) => id !== m.id)
+                          : [...settings.materialIds, m.id]
                         onChangeSettings({ ...settings, materialIds: next })
                       }}
                     >
